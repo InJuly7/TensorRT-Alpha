@@ -31,23 +31,30 @@ void resize_rgb_padding_device_kernel(float* src, int src_width, int src_height,
 		int dst_x = dx % dst_width; 
 		float src_x = 0;
 		float src_y = 0;
+		// 从 目标图片像素点位置索引 映射回 源图片像素点位置索引
 		affine_project_device_kernel(&matrix, dst_x, dst_y, &src_x, &src_y);
 		float c0 = padding_value, c1 = padding_value, c2 = padding_value;
 		if (src_x < -1 || src_x >= src_width || src_y < -1 || src_y >= src_height)
 		{
+			// 超出原图片像素点位置索引
 		}
 		else
 		{
+			// 向下取整 使得 (0,1) 区间的小数 都映射到整数 0 
 			int y_low = floorf(src_y);
 			int x_low = floorf(src_x);
 			int y_high = y_low + 1;   
-			int x_high = x_low + 1;   
+			int x_high = x_low + 1;
 			float const_values[] = { padding_value, padding_value, padding_value };
-			float ly = src_y - y_low;
-			float lx = src_x - x_low;
-			float hy = 1 - ly;
-			float hx = 1 - lx;
-			float w1 = hy * hx, w2 = hy * lx, w3 = ly * hx, w4 = ly * lx; 
+			float ly = src_y - y_low; // α 
+			float lx = src_x - x_low; // β
+			float hy = 1 - ly; // 1-α
+			float hx = 1 - lx; // 1-β
+			float w1 = hy * hx; // (1-α)(1-β)
+			float w2 = hy * lx; // α(1-β)
+			float w3 = ly * hx; // (1-α)β
+			float w4 = ly * lx; // αβ
+			// padding 
 			float* v1 = const_values;
 			float* v2 = const_values;
 			float* v3 = const_values;
@@ -61,7 +68,6 @@ void resize_rgb_padding_device_kernel(float* src, int src_width, int src_height,
 				if (x_high < src_width)
 					v2 = src + dy * src_volume + y_low * src_width * 3 + x_high * 3;
 			}
-
 			if (y_high < src_height)
 			{
 				if (x_low >= 0)
@@ -70,6 +76,7 @@ void resize_rgb_padding_device_kernel(float* src, int src_width, int src_height,
 				if (x_high < src_width)
 					v4 = src + dy * src_volume + y_high * src_width * 3 + x_high * 3;
 			}
+
 			c0 = floorf(w1 * v1[0] + w2 * v2[0] + w3 * v3[0] + w4 * v4[0] + 0.5f);
 			c1 = floorf(w1 * v1[1] + w2 * v2[1] + w3 * v3[1] + w4 * v4[1] + 0.5f);
 			c2 = floorf(w1 * v1[2] + w2 * v2[2] + w3 * v3[2] + w4 * v4[2] + 0.5f);
@@ -83,13 +90,14 @@ void resize_rgb_padding_device_kernel(float* src, int src_width, int src_height,
 
 __global__
 void resize_rgb_padding_device_kernel(unsigned char* src, int src_width, int src_height, int src_area, int src_volume,
-	float* dst, int dst_width, int dst_height, int dst_area, int dst_volume,
-	int batch_size, float padding_value, utils::AffineMat matrix)
+										float* dst, int dst_width, int dst_height, int dst_area, int dst_volume,
+										int batch_size, float padding_value, utils::AffineMat matrix)
 {
 	int dx = blockDim.x * blockIdx.x + threadIdx.x;
 	int dy = blockDim.y * blockIdx.y + threadIdx.y;
 	if (dx < dst_area && dy < batch_size)
 	{
+		// 当前线程 对应目标Tensor位置
 		int dst_y = dx / dst_width;
 		int dst_x = dx % dst_width;
 		float src_x = 0;
@@ -101,6 +109,7 @@ void resize_rgb_padding_device_kernel(unsigned char* src, int src_width, int src
 		}
 		else
 		{
+			// 
 			int y_low = floorf(src_y); 
 			int x_low = floorf(src_x); 
 			int y_high = y_low + 1;
@@ -121,17 +130,21 @@ void resize_rgb_padding_device_kernel(unsigned char* src, int src_width, int src
 			if (y_low >= 0)
 			{
 				if (x_low >= 0)
+					// x_low y_low
 					v1 = src + dy * src_volume + y_low * src_width * 3 + x_low * 3;
-
+				
 				if (x_high < src_width)
+					// x_high y_low
 					v2 = src + dy * src_volume + y_low * src_width * 3 + x_high * 3;
 			}
 			if (y_high < src_height)
 			{
 				if (x_low >= 0)
+					// x_low y_high 
 					v3 = src + dy * src_volume + y_high * src_width * 3 + x_low * 3;
-
+					
 				if (x_high < src_width)
+					// x_high y_high
 					v4 = src + dy * src_volume + y_high * src_width * 3 + x_high * 3;
 			}
 			c0 = floorf(w1 * v1[0] + w2 * v2[0] + w3 * v3[0] + w4 * v4[0] + 0.5f);
@@ -271,8 +284,7 @@ void resize_gray_without_padding_device_kernel(float* src, int src_width, int sr
 }
 
 __global__ 
-void bgr2rgb_device_kernel(float* src, float* dst,
-	int batch_size, int img_height, int img_width, int img_area, int img_volume)
+void bgr2rgb_device_kernel(float* src, float* dst, int batch_size, int img_height, int img_width, int img_area, int img_volume)
 {
 	int dx = blockDim.x * blockIdx.x + threadIdx.x;
 	int dy = blockDim.y * blockIdx.y + threadIdx.y;
@@ -303,11 +315,8 @@ float norm_device(float val, float s, float mean, float std)
 }
 
 __global__ 
-void norm_device_kernel(float* src, float* dst,
-	int batch_size, int img_height, int img_width, int img_area, int img_volume,
-	float scale,
-	float mean0, float mean1, float mean2,
-	float std0, float std1, float std2)
+void norm_device_kernel(float* src, float* dst, int batch_size, int img_height, int img_width, int img_area, int img_volume, float scale, 
+						float mean0, float mean1, float mean2, float std0, float std1, float std2)
 {
 	int dx = blockDim.x * blockIdx.x + threadIdx.x;
 	int dy = blockDim.y * blockIdx.y + threadIdx.y;
@@ -331,8 +340,7 @@ void norm_device_kernel(float* src, float* dst,
 	}
 }
 
-__global__ void hwc2chw_device_kernel(float* src, float* dst,
-	int batch_size, int img_height, int img_width, int img_area, int img_volume)
+__global__ void hwc2chw_device_kernel(float* src, float* dst, int batch_size, int img_height, int img_width, int img_area, int img_volume)
 {
 	int dx = blockDim.x * blockIdx.x + threadIdx.x;
 	int dy = blockDim.y * blockIdx.y + threadIdx.y;
@@ -350,9 +358,8 @@ __global__ void hwc2chw_device_kernel(float* src, float* dst,
 	}
 }
 
-void resizeDevice(const int& batchSize, float* src, int srcWidth, int srcHeight,
-	float* dst, int dstWidth, int dstHeight,
-	float paddingValue, utils::AffineMat matrix)
+void resizeDevice(const int& batchSize, float* src, int srcWidth, int srcHeight, float* dst, int dstWidth, int dstHeight, 
+					float paddingValue, utils::AffineMat matrix)
 {
 	dim3 block_size(BLOCK_SIZE, BLOCK_SIZE);
 	dim3 grid_size((dstWidth * dstHeight + BLOCK_SIZE - 1) / BLOCK_SIZE,
@@ -364,37 +371,41 @@ void resizeDevice(const int& batchSize, float* src, int srcWidth, int srcHeight,
 	int dst_volume = 3 * dstHeight * dstWidth;
 	int dst_area = dstHeight * dstWidth;
 
-	resize_rgb_padding_device_kernel << < grid_size, block_size, 0, nullptr >> > (src, srcWidth, srcHeight, src_area, src_volume,
+	resize_rgb_padding_device_kernel <<< grid_size, block_size, 0, nullptr >>> (src, srcWidth, srcHeight, src_area, src_volume,
 		dst, dstWidth, dstHeight, dst_area, dst_volume,
 		batchSize, paddingValue, matrix);
 }
 
-void resizeDevice(const int& batchSize, unsigned char* src, int srcWidth, int srcHeight,
-	float* dst, int dstWidth, int dstHeight,
-	float paddingValue, utils::AffineMat matrix)
+void resizeDevice(const int& batchSize, unsigned char* src, int srcWidth, int srcHeight, float* dst, int dstWidth, int dstHeight, 
+					float paddingValue, utils::AffineMat matrix)
 {
+	std::cout << "Debug resizeDevice Start:" << std::endl;
 	dim3 block_size(BLOCK_SIZE, BLOCK_SIZE);
-	dim3 grid_size((dstWidth * dstHeight + BLOCK_SIZE - 1) / BLOCK_SIZE,
-		(batchSize + BLOCK_SIZE - 1) / BLOCK_SIZE);
-
+	dim3 grid_size((dstWidth * dstHeight + BLOCK_SIZE - 1) / BLOCK_SIZE, (batchSize + BLOCK_SIZE - 1) / BLOCK_SIZE);
+	// hwc 格式 
 	int src_volume = 3 * srcHeight * srcWidth;
 	int src_area = srcHeight * srcWidth;
 
 	int dst_volume = 3 * dstHeight * dstWidth;
 	int dst_area = dstHeight * dstWidth;
 
-	resize_rgb_padding_device_kernel << < grid_size, block_size, 0, nullptr >> > (src, srcWidth, srcHeight, src_area, src_volume,
-		dst, dstWidth, dstHeight, dst_area, dst_volume,
-		batchSize, paddingValue, matrix);
+	std::cout << "	src_volume: " << src_volume << std::endl;
+	std::cout << "	src_area: " << src_area << std::endl;
+	std::cout << "	dst_volume: " << dst_volume << std::endl;
+	std::cout << "	dst_area: " << dst_area << std::endl;
+
+	resize_rgb_padding_device_kernel <<< grid_size, block_size, 0, nullptr >>> (src, srcWidth, srcHeight, src_area, src_volume, dst, 
+																				dstWidth, dstHeight, dst_area, dst_volume, batchSize, 
+																				paddingValue, matrix);
+	std::cout << "Debug resizeDevice Ends:" << std::endl;
 }
 
-void resizeDevice(const int& batchSize, float* src, int srcWidth, int srcHeight,
-	float* dst, int dstWidth, int dstHeight, 
-	utils::ColorMode mode, utils::AffineMat matrix)
+void resizeDevice(const int& batchSize, float* src, int srcWidth, int srcHeight, float* dst, int dstWidth, int dstHeight, 
+					utils::ColorMode mode, utils::AffineMat matrix)
 {
 	dim3 block_size(BLOCK_SIZE, BLOCK_SIZE);
 	dim3 grid_size((dstWidth * dstHeight + BLOCK_SIZE - 1) / BLOCK_SIZE,
-		(batchSize + BLOCK_SIZE - 1) / BLOCK_SIZE);
+					(batchSize + BLOCK_SIZE - 1) / BLOCK_SIZE);
 	int src_area = srcHeight * srcWidth;
 	int dst_area = dstHeight * dstWidth;
 
@@ -416,43 +427,51 @@ void resizeDevice(const int& batchSize, float* src, int srcWidth, int srcHeight,
 }
 
 void bgr2rgbDevice(const int& batchSize, float* src, int srcWidth, int srcHeight,
-	float* dst, int dstWidth, int dstHeight)
+					float* dst, int dstWidth, int dstHeight)
 {
 	dim3 block_size(BLOCK_SIZE, BLOCK_SIZE);
-	dim3 grid_size((dstWidth * dstHeight * 3 + BLOCK_SIZE - 1) / BLOCK_SIZE,
-		(batchSize + BLOCK_SIZE - 1) / BLOCK_SIZE);
+	dim3 grid_size((dstWidth * dstHeight * 3 + BLOCK_SIZE - 1) / BLOCK_SIZE, (batchSize + BLOCK_SIZE - 1) / BLOCK_SIZE);
 
 	int img_volume = 3 * srcHeight * srcWidth;
 	int img_area = srcHeight * srcWidth;
 	int img_height = srcHeight;
 	int img_width = srcWidth;
-	bgr2rgb_device_kernel << < grid_size, block_size, 0, nullptr >> > (src, dst, batchSize, img_height, img_width, img_area, img_volume);
+	bgr2rgb_device_kernel <<< grid_size, block_size, 0, nullptr >>> (src, dst, batchSize, img_height, img_width, img_area, img_volume);
 }
 
-void normDevice(const int& batchSize, float* src, int srcWidth, int srcHeight,
-	float* dst, int dstWidth, int dstHeight,
-	utils::InitParameter param)
+void normDevice(const int& batchSize, float* src, int srcWidth, int srcHeight, float* dst, int dstWidth, int dstHeight, 
+				utils::InitParameter param)
 {
+	std::cout << "Debug normDevice Start: " << std::endl;
 	dim3 block_size(BLOCK_SIZE, BLOCK_SIZE);
-	dim3 grid_size((dstWidth * dstHeight * 3 + BLOCK_SIZE - 1) / BLOCK_SIZE,
-		(batchSize + BLOCK_SIZE - 1) / BLOCK_SIZE);
+	dim3 grid_size((dstWidth * dstHeight * 3 + BLOCK_SIZE - 1) / BLOCK_SIZE, (batchSize + BLOCK_SIZE - 1) / BLOCK_SIZE);
 
 	int img_volume = 3 * srcHeight * srcWidth;
 	int img_area = srcHeight * srcWidth;
 	int img_height = srcHeight;
 	int img_width = srcWidth;
-	norm_device_kernel << < grid_size, block_size, 0, nullptr >> > (src, dst, batchSize, img_height, img_width, img_area, img_volume,
-		param.scale, param.means[0], param.means[1], param.means[2], param.stds[0], param.stds[1], param.stds[2]);
+	std::cout << "	img_volume: " << img_volume << std::endl;
+	std::cout << "	img_area: " << img_area << std::endl;
+	std::cout << "	img_height: " << img_height << std::endl;
+	std::cout << "	img_width: " << img_width << std::endl;
+	std::cout << "	param.scale: " << param.scale << std::endl;
+	std::cout << "	param.means[0]: " << param.means[0] << std::endl;
+	std::cout << "	param.means[1]: " << param.means[1] << std::endl;
+	std::cout << "	param.means[2]: " << param.means[2] << std::endl;
+	std::cout << "	param.stds[0]: " << param.stds[0] << std::endl;
+	std::cout << "	param.stds[1]: " << param.stds[1] << std::endl;
+	std::cout << "	param.stds[2]: " << param.stds[2] << std::endl;
+	norm_device_kernel <<< grid_size, block_size, 0, nullptr >>> (src, dst, batchSize, img_height, img_width, img_area, img_volume,
+																	param.scale, param.means[0], param.means[1], param.means[2], 
+																	param.stds[0], param.stds[1], param.stds[2]);
+	std::cout << "Debug normDevice Ends;" << std::endl;
 }
 
 void hwc2chwDevice(const int& batchSize, float* src, int srcWidth, int srcHeight,
 	float* dst, int dstWidth, int dstHeight)
 {
 	dim3 block_size(BLOCK_SIZE, BLOCK_SIZE);
-	dim3 grid_size((dstWidth * dstHeight * 3 + BLOCK_SIZE - 1) / BLOCK_SIZE,
-		(batchSize + BLOCK_SIZE - 1) / BLOCK_SIZE);
-
-
+	dim3 grid_size((dstWidth * dstHeight * 3 + BLOCK_SIZE - 1) / BLOCK_SIZE, (batchSize + BLOCK_SIZE - 1) / BLOCK_SIZE);
 	int img_volume = 3 * srcHeight * srcWidth;
 	int img_area = srcHeight * srcWidth;
 	int img_height = srcHeight;
@@ -517,10 +536,8 @@ void decode_yolo_device_kernel(int batch_size, int  num_class, int topK, float c
 }
 
 static __device__ 
-float box_iou(
-	float aleft, float atop, float aright, float abottom,
-	float bleft, float btop, float bright, float bbottom
-) {
+float box_iou( float aleft, float atop, float aright, float abottom, float bleft, float btop, float bright, float bbottom)
+{
 	float cleft = max(aleft, bleft);
 	float ctop = max(atop, btop);
 	float cright = min(aright, bright);
@@ -536,8 +553,7 @@ float box_iou(
 }
 
 __global__ 
-void nms_fast_kernel(int topK, int batch_size, float iou_thresh,
-	float* src, int srcWidth, int srcHeight, int srcArea)
+void nms_fast_kernel(int topK, int batch_size, float iou_thresh, float* src, int srcWidth, int srcHeight, int srcArea)
 {
 	int dx = blockDim.x * blockIdx.x + threadIdx.x;
 	int dy = blockDim.y * blockIdx.y + threadIdx.y;
@@ -577,8 +593,7 @@ void nms_fast_kernel(int topK, int batch_size, float iou_thresh,
 }
 
 __global__
-void get_key_val_kernel(int batchSize, float* src, int srcWidth, int srcHeight, int srcArea,
-	int* idx, float* conf)
+void get_key_val_kernel(int batchSize, float* src, int srcWidth, int srcHeight, int srcArea, int* idx, float* conf)
 {
 	int dx = blockDim.x * blockIdx.x + threadIdx.x;
 	int dy = blockDim.y * blockIdx.y + threadIdx.y;
@@ -586,17 +601,16 @@ void get_key_val_kernel(int batchSize, float* src, int srcWidth, int srcHeight, 
 	{
 		return;
 	}
-	int* p_idx_row    = idx  + dy * srcHeight + dx;
-	float* p_conf_row = conf + dy * srcHeight + dx;
+	int* p_idx_row = idx + dy * srcHeight + dx;
 	p_idx_row[0] = dx;
-	float* p_src_row = src + dy * srcArea + 1 + dx * srcWidth; 
+	float* p_conf_row = conf + dy * srcHeight + dx;
+	float* p_src_row = src + dy * srcArea + 1 + dx * srcWidth;
+	// conf
 	p_conf_row[0] = p_src_row[4];
 }
 
 __global__
-void nms_sort_kernel(int topK, int batch_size, float iou_thresh,
-	float* src, int srcWidth, int srcHeight, int srcArea,
-	int* idx)
+void nms_sort_kernel(int topK, int batch_size, float iou_thresh, float* src, int srcWidth, int srcHeight, int srcArea, int* idx)
 {
 	int dx = blockDim.x * blockIdx.x + threadIdx.x;
 	int dy = blockDim.y * blockIdx.y + threadIdx.y;
@@ -604,6 +618,7 @@ void nms_sort_kernel(int topK, int batch_size, float iou_thresh,
 	{
 		return;
 	}
+	// 该batch 一共有多少个候选框
 	float* p_count = src + dy * srcArea;
 	int count = min(int(p_count[0]), topK);
 
@@ -614,26 +629,29 @@ void nms_sort_kernel(int topK, int batch_size, float iou_thresh,
 	int* p_idx1 = idx + dy * srcHeight + dx;
 	float* pcurrent = src + dy * srcArea + 1 + p_idx1[0] * srcWidth; 
 	
+	// 该候选框 与后面的(比其conf小的所有侯选框)做IOU
 	for (int i = (dx + 1); i < count; ++i) 
 	{
 		int* p_idx2 = idx + dy * srcHeight + i;
 		float* pitem = src + dy * srcArea + 1 + p_idx2[0] * srcWidth; 
-		
+		// label 不同时候
 		if (abs(pcurrent[5] - pitem[5]) > 1e-3) 
 			continue;
-		float iou = box_iou(pcurrent[0], pcurrent[1], pcurrent[2], pcurrent[3],
-			pitem[0], pitem[1], pitem[2], pitem[3]);
+		float iou = box_iou(pcurrent[0], pcurrent[1], pcurrent[2], pcurrent[3], pitem[0], pitem[1], pitem[2], pitem[3]);
 
 		if (iou > iou_thresh)
 		{
+			// 框选的是同一个类别, 并且较大概率框选的位置相同 
+			// 将低概率的框置信度设为0
 			pitem[6] = 0; 
 		}
 	}
 }
 
 __global__
-void copy_with_padding_kernel_function(int batchSize, float* src, int srcWidth, int srcHeight, int srcArea, int srcVolume,
-	float* dst, int dstWidth, int dstHeight, int dstArea, int dstVolume, float paddingValue, int padTop, int padLeft)
+void copy_with_padding_kernel_function(int batchSize, float* src, int srcWidth, int srcHeight, int srcArea, int srcVolume, float* dst, 
+										int dstWidth, int dstHeight, int dstArea, int dstVolume, float paddingValue, int padTop, 
+										int padLeft)
 {
 	int dx = blockDim.x * blockIdx.x + threadIdx.x;
 	int dy = blockDim.y * blockIdx.y + threadIdx.y;
@@ -680,28 +698,34 @@ void decodeDevice(utils::InitParameter param, float* src, int srcWidth, int srcH
 void nmsDeviceV1(utils::InitParameter param, float* src, int srcWidth, int srcHeight, int srcArea)
 {
 	dim3 block_size(BLOCK_SIZE, BLOCK_SIZE);
-	dim3 grid_size((param.topK + BLOCK_SIZE - 1) / BLOCK_SIZE, 
-		(param.batch_size + BLOCK_SIZE - 1) / BLOCK_SIZE);
+	dim3 grid_size((param.topK + BLOCK_SIZE - 1) / BLOCK_SIZE, (param.batch_size + BLOCK_SIZE - 1) / BLOCK_SIZE);
 
-	nms_fast_kernel << < grid_size, block_size, 0, nullptr >> > (param.topK, param.batch_size, param.iou_thresh,
-		src, srcWidth, srcHeight, srcArea);
+	nms_fast_kernel <<< grid_size, block_size, 0, nullptr >>> (param.topK, param.batch_size, param.iou_thresh, src, srcWidth, srcHeight, 
+																srcArea);
 }
 
-void nmsDeviceV2(utils::InitParameter param, float* src, int srcWidth, int srcHeight, int srcArea, 
-	int* idx, float* conf)
+void nmsDeviceV2(utils::InitParameter param, float* src, int srcWidth, int srcHeight, int srcArea, int* idx, float* conf)
 {
 	dim3 block_size(BLOCK_SIZE, BLOCK_SIZE);
-	dim3 grid_size((param.topK + BLOCK_SIZE - 1) / BLOCK_SIZE, 
-		(param.batch_size + BLOCK_SIZE - 1) / BLOCK_SIZE);
-	get_key_val_kernel << < grid_size, block_size, 0, nullptr >> > (param.batch_size, src, srcWidth, srcHeight, srcArea, idx, conf);
+	dim3 grid_size((param.topK + BLOCK_SIZE - 1) / BLOCK_SIZE, (param.batch_size + BLOCK_SIZE - 1) / BLOCK_SIZE);
+	get_key_val_kernel <<< grid_size, block_size, 0, nullptr >>> (param.batch_size, src, srcWidth, srcHeight, srcArea, idx, conf);
+	// 对每个batch中的框(topK)进行排序, 更新 idx 
 	for (size_t i = 0; i < param.batch_size; i++)
 	{
-		int* p_idx     = idx + i * srcHeight;
+		int* p_idx = idx + i * srcHeight;
 		float* p_conf = conf + i * srcHeight;
-		thrust::sort_by_key(thrust::device, p_conf, p_conf + srcHeight, p_idx, thrust::greater<float>());
+		// thrust::sort_by_key: 根据key(置信度)排序，同时重排对应的value(索引)
+    	// thrust::greater<float>(): 降序排序
+		thrust::sort_by_key(
+			thrust::device,           // 在GPU上执行
+			p_conf,                   // key数组起始
+			p_conf + srcHeight,       // key数组结束
+			p_idx,                    // value数组（索引）
+			thrust::greater<float>()  // 降序排序
+		);
 	}
-	nms_sort_kernel << < grid_size, block_size, 0, nullptr >> > (param.topK, param.batch_size, param.iou_thresh,
-		src, srcWidth, srcHeight, srcArea, idx);
+	nms_sort_kernel <<< grid_size, block_size, 0, nullptr >>> (param.topK, param.batch_size, param.iou_thresh, src, srcWidth, srcHeight, 
+																srcArea, idx);
 }
 
 void copyWithPaddingDevice(const int& batchSize, float* src, int srcWidth, int srcHeight,
@@ -717,6 +741,7 @@ void copyWithPaddingDevice(const int& batchSize, float* src, int srcWidth, int s
 	int dst_volume = 3 * dstHeight * dstWidth;
 	assert(srcWidth <= dstWidth);
 	assert(srcHeight <= dstHeight);
-	copy_with_padding_kernel_function << < grid_size, block_size, 0, nullptr >> > (batchSize, src, srcWidth, srcHeight, src_area, src_volume,
-		dst, dstWidth, dstHeight, dst_area, dst_volume, paddingValue, padTop, padLeft);
+	copy_with_padding_kernel_function <<< grid_size, block_size, 0, nullptr >>> (batchSize, src, srcWidth, srcHeight, src_area, src_volume,
+																					dst, dstWidth, dstHeight, dst_area, dst_volume, 
+																					paddingValue, padTop, padLeft);
 }

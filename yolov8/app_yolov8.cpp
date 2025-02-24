@@ -25,9 +25,9 @@ void task(YOLOV8& yolo, const utils::InitParameter& param, std::vector<cv::Mat>&
 	utils::DeviceTimer d_t3; yolo.postprocess(imgsBatch); float t3 = d_t3.getUsedTime();
 	sample::gLogInfo << 
 		//"copy time = " << t0 / param.batch_size << "; "
-		"preprocess time = " << t1 / param.batch_size << "; "
-		"infer time = " << t2 / param.batch_size << "; "
-		"postprocess time = " << t3 / param.batch_size << std::endl;
+		"preprocess time = " << t1 / param.batch_size << "ms; "
+		"infer time = " << t2 / param.batch_size << "ms; "
+		"postprocess time = " << t3 / param.batch_size << "ms;"<< std::endl;
 
 	if(isShow)
 		utils::show(yolo.getObjectss(), param.class_names, delayTime, imgsBatch);
@@ -51,6 +51,7 @@ int main(int argc, char** argv)
 		});
 	// parameters
 	utils::InitParameter param;
+	// 初始化 param
 	setParameters(param);
 	// path
 	std::string model_path = "../../data/yolov8/yolov8n.trt";
@@ -70,6 +71,7 @@ int main(int argc, char** argv)
 	int batch_size = 8;
 	bool is_show = false;
 	bool is_save = false;
+	// 解析配置项
 	if(parser.has("model"))
 	{
 		model_path = parser.get<std::string>("model");
@@ -116,11 +118,12 @@ int main(int argc, char** argv)
 		param.save_path = parser.get<std::string>("savePath");
 		sample::gLogInfo << "save_path = " << param.save_path << std::endl;
 	}
-
+	// 循环(推理)的总次数 [frame/batch_size]+
 	int total_batches = 0;
 	int delay_time = 1;
 	cv::VideoCapture capture;
-	if (!setInputStream(source, image_path, video_path, camera_id,
+	// 配置 capture,total_batches,delay_time,param.batch_size
+	if (!utils::setInputStream(source, image_path, video_path, camera_id,
 		capture, total_batches, delay_time, param))
 	{
 		sample::gLogError << "read the input data errors!" << std::endl;
@@ -145,8 +148,11 @@ int main(int argc, char** argv)
 	yolo.check();
 	cv::Mat frame;
 	std::vector<cv::Mat> imgs_batch;
+	// 预先分配空间,避免后续插入元素时频繁重新分配内存
 	imgs_batch.reserve(param.batch_size);
-	sample::gLogInfo << imgs_batch.capacity() << std::endl;
+	// capacity() 返回当前 vector 的容量
+	sample::gLogInfo << "batch_size: "<< imgs_batch.capacity() << std::endl;
+	// 第 i 次 循环(推理)
 	int batchi = 0;
 	while (capture.isOpened())
 	{
@@ -154,17 +160,20 @@ int main(int argc, char** argv)
 		{
 			break;
 		}
+		// 当前批次未满 
 		if (imgs_batch.size() < param.batch_size) // get input
 		{
 			if (source != utils::InputStream::IMAGE)
 			{
+				// hwc 格式
 				capture.read(frame);
 			}
 			else
 			{
+				// hwc 格式
 				frame = cv::imread(image_path);
 			}
-
+			// 没有更多帧 (一般为最后一轮/第一轮)
 			if (frame.empty())
 			{
 				sample::gLogWarning << "no more video or camera frame" << std::endl;
@@ -173,6 +182,7 @@ int main(int argc, char** argv)
 				batchi++;
 				break;
 			}
+			// 将帧添加到当前批次
 			else
 			{
 				imgs_batch.emplace_back(frame.clone());
@@ -185,6 +195,6 @@ int main(int argc, char** argv)
 			batchi++;
 		}
 	}
-	return  -1;
+	return 0;
 }
 

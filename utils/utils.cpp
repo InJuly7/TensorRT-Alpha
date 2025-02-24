@@ -38,14 +38,19 @@ std::vector<unsigned char> utils::loadModel(const std::string& file)
     {
         return {};
     }
+	// 文件指针移到i末尾
     in.seekg(0, std::ios::end);
+	// 获取 当前指针位置
     size_t length = in.tellg();
 
     std::vector<uint8_t> data;
     if (length > 0)
-    {
+    {	
+		// 将文件指针重置到开始位置
         in.seekg(0, std::ios::beg);
+		// 调整vector大小到文件大小
         data.resize(length);
+		// 将首地址 转换为 char 指针
         in.read((char*)&data[0], length);
     }
     in.close();
@@ -79,15 +84,20 @@ bool utils::setInputStream(const utils::InputStream& source, const std::string& 
 		total_frames = 1;
 		totalBatches = 1;
 		delayTime = 0;
+		sample::gLogInfo << "total_frames = " << total_frames << std::endl;
+		sample::gLogInfo << "totalBatches = " << totalBatches << std::endl;
 		break;
 	case utils::InputStream::VIDEO:
 		capture.open(videoPath);
+		// 获取视频总帧数
 		total_frames = capture.get(cv::CAP_PROP_FRAME_COUNT);
-		totalBatches = (total_frames % param.batch_size == 0) ?
-			(total_frames / param.batch_size) : (total_frames / param.batch_size + 1);
+		totalBatches = (total_frames % param.batch_size == 0) ? (total_frames / param.batch_size) : (total_frames / param.batch_size + 1);
+		sample::gLogInfo << "total_frames = " << total_frames << std::endl;
+		sample::gLogInfo << "totalBatches = " << totalBatches << std::endl;
 		break;
 	case utils::InputStream::CAMERA:
 		capture.open(cameraID);
+		// 配置成 无穷大
 		total_frames = INT_MAX;
 		totalBatches = INT_MAX;
 		break;

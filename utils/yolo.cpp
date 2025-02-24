@@ -1,6 +1,6 @@
 #include"yolo.h"
 
-yolo::YOLO::YOLO(const utils::InitParameter& param) : m_param(param)
+yolo::YOLO::YOLO(const utils::InitParameter& param) : m_param(param) // 初始化列表 m_param = param
 {
     // input
     m_input_src_device = nullptr;
@@ -21,6 +21,7 @@ yolo::YOLO::YOLO(const utils::InitParameter& param) : m_param(param)
     m_output_objects_width = 7;
     m_output_idx_device = nullptr;
     m_output_conf_device = nullptr;
+    // 第一个元素用于存储有效框的数量
     int output_objects_size = param.batch_size * (1 + param.topK * m_output_objects_width); // 1: count
     CHECK(cudaMalloc(&m_output_objects_device, output_objects_size * sizeof(float)));
     CHECK(cudaMalloc(&m_output_idx_device, m_param.batch_size * m_param.topK * sizeof(int)));
@@ -84,6 +85,7 @@ bool yolo::YOLO::init(const std::vector<unsigned char>& trtFile)
         }
     }
     CHECK(cudaMalloc(&m_output_src_device, m_param.batch_size * m_output_area * sizeof(float)));
+
     float a = float(m_param.dst_h) / m_param.src_h;
     float b = float(m_param.dst_w) / m_param.src_w;
     float scale = a < b ? a : b;
