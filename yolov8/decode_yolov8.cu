@@ -70,6 +70,7 @@ void yolov8::decodeDevice(utils::InitParameter param, float* src, int srcWidth, 
 	std::cout << "Debug decodeDevice Start: " << std::endl; 
 	dim3 block_size(BLOCK_SIZE, BLOCK_SIZE);
 	dim3 grid_size((srcHeight + BLOCK_SIZE - 1) / BLOCK_SIZE, (param.batch_size + BLOCK_SIZE - 1) / BLOCK_SIZE);
+	// 第一个标志位 记录有效框数量：
 	int dstArea = 1 + dstWidth * dstHeight;
 	// [N,8400,84]
 	std::cout << "	param.batch_size: " << param.batch_size << std::endl;

@@ -426,9 +426,9 @@ void resizeDevice(const int& batchSize, float* src, int srcWidth, int srcHeight,
 	}
 }
 
-void bgr2rgbDevice(const int& batchSize, float* src, int srcWidth, int srcHeight,
-					float* dst, int dstWidth, int dstHeight)
+void bgr2rgbDevice(const int& batchSize, float* src, int srcWidth, int srcHeight, float* dst, int dstWidth, int dstHeight)
 {
+	std::cout << "Debug bgr2rgbDevice Start:" << std::endl;
 	dim3 block_size(BLOCK_SIZE, BLOCK_SIZE);
 	dim3 grid_size((dstWidth * dstHeight * 3 + BLOCK_SIZE - 1) / BLOCK_SIZE, (batchSize + BLOCK_SIZE - 1) / BLOCK_SIZE);
 
@@ -436,7 +436,12 @@ void bgr2rgbDevice(const int& batchSize, float* src, int srcWidth, int srcHeight
 	int img_area = srcHeight * srcWidth;
 	int img_height = srcHeight;
 	int img_width = srcWidth;
+	std::cout << "	img_volume: " << img_volume << std::endl;
+	std::cout << "	img_area: " << img_area << std::endl;
+	std::cout << "	img_height: " << img_height << std::endl;
+	std::cout << "	img_width: " << img_width << std::endl;		
 	bgr2rgb_device_kernel <<< grid_size, block_size, 0, nullptr >>> (src, dst, batchSize, img_height, img_width, img_area, img_volume);
+	std::cout << "Debug bgr2rgbDevice Ends:" << std::endl;
 }
 
 void normDevice(const int& batchSize, float* src, int srcWidth, int srcHeight, float* dst, int dstWidth, int dstHeight, 
@@ -467,16 +472,21 @@ void normDevice(const int& batchSize, float* src, int srcWidth, int srcHeight, f
 	std::cout << "Debug normDevice Ends;" << std::endl;
 }
 
-void hwc2chwDevice(const int& batchSize, float* src, int srcWidth, int srcHeight,
-	float* dst, int dstWidth, int dstHeight)
+void hwc2chwDevice(const int& batchSize, float* src, int srcWidth, int srcHeight, float* dst, int dstWidth, int dstHeight)
 {
+	std::cout << "Debug hwc2chwDevice Start:" << std::endl;
 	dim3 block_size(BLOCK_SIZE, BLOCK_SIZE);
 	dim3 grid_size((dstWidth * dstHeight * 3 + BLOCK_SIZE - 1) / BLOCK_SIZE, (batchSize + BLOCK_SIZE - 1) / BLOCK_SIZE);
 	int img_volume = 3 * srcHeight * srcWidth;
 	int img_area = srcHeight * srcWidth;
 	int img_height = srcHeight;
 	int img_width = srcWidth;
+	std::cout << "	img_volume: " << img_volume << std::endl;
+	std::cout << "	img_area: " << img_area << std::endl;
+	std::cout << "	img_height: " << img_height << std::endl;
+	std::cout << "	img_width: " << img_width << std::endl;	
 	hwc2chw_device_kernel << < grid_size, block_size, 0, nullptr >> > (src, dst, batchSize, img_height, img_width, img_area, img_volume);
+	std::cout << "Debug hwc2chwDevice Ends:" << std::endl;
 }
 
 __global__ 
@@ -563,15 +573,17 @@ void nms_fast_kernel(int topK, int batch_size, float iou_thresh, float* src, int
 	}
 	float* p_count = src + dy * srcArea;
 	int count = min(int(p_count[0]), topK);
-	
 	if (dx >= count)
 	{
 		return;
 	}
+
 	float* pcurrent = src + dy * srcArea + 1 + dx * srcWidth;
+	// 每个框 都需要与其余的框做IOU 操作 
 	for (int i = 0; i < count; ++i) 
 	{
 		float* pitem = src + dy * srcArea + 1 + i * srcWidth; 
+		// 校验是否相同类别
 		if (i == dx || pcurrent[5] != pitem[5]) 
 			continue;
 
@@ -580,11 +592,11 @@ void nms_fast_kernel(int topK, int batch_size, float iou_thresh, float* src, int
 			if (pitem[4] == pcurrent[4] && i < dx) 
 				continue;
 
-			float iou = box_iou(pcurrent[0], pcurrent[1], pcurrent[2], pcurrent[3],
-				pitem[0], pitem[1], pitem[2], pitem[3]);
+			float iou = box_iou(pcurrent[0], pcurrent[1], pcurrent[2], pcurrent[3], pitem[0], pitem[1], pitem[2], pitem[3]);
 
 			if (iou > iou_thresh)
 			{
+				// 更改 相同类别小概率的框 置信度
 				pcurrent[6] = 0;
 				return;
 			}
@@ -601,11 +613,12 @@ void get_key_val_kernel(int batchSize, float* src, int srcWidth, int srcHeight, 
 	{
 		return;
 	}
+	// idx
 	int* p_idx_row = idx + dy * srcHeight + dx;
 	p_idx_row[0] = dx;
+	// conf
 	float* p_conf_row = conf + dy * srcHeight + dx;
 	float* p_src_row = src + dy * srcArea + 1 + dx * srcWidth;
-	// conf
 	p_conf_row[0] = p_src_row[4];
 }
 
@@ -697,17 +710,26 @@ void decodeDevice(utils::InitParameter param, float* src, int srcWidth, int srcH
 
 void nmsDeviceV1(utils::InitParameter param, float* src, int srcWidth, int srcHeight, int srcArea)
 {
+	std::cout << "Debug nmsDeviceV1 Start:" << std::endl;
 	dim3 block_size(BLOCK_SIZE, BLOCK_SIZE);
 	dim3 grid_size((param.topK + BLOCK_SIZE - 1) / BLOCK_SIZE, (param.batch_size + BLOCK_SIZE - 1) / BLOCK_SIZE);
-
+	std::cout << "	param.topK: " << param.topK << std::endl;
+	std::cout << "	param.batch_size: " << param.batch_size << std::endl;
+	std::cout << "	param.iou_thresh: " << param.iou_thresh << std::endl;
+	std::cout << "	srcWidth: " << srcWidth << std::endl;
+	std::cout << "	srcHeight: " << srcHeight << std::endl;
+	std::cout << "	srcArea: " << srcArea << std::endl;	
 	nms_fast_kernel <<< grid_size, block_size, 0, nullptr >>> (param.topK, param.batch_size, param.iou_thresh, src, srcWidth, srcHeight, 
 																srcArea);
+	std::cout << "Debug nmsDeviceV1 Ends:" << std::endl;
 }
 
 void nmsDeviceV2(utils::InitParameter param, float* src, int srcWidth, int srcHeight, int srcArea, int* idx, float* conf)
 {
 	dim3 block_size(BLOCK_SIZE, BLOCK_SIZE);
 	dim3 grid_size((param.topK + BLOCK_SIZE - 1) / BLOCK_SIZE, (param.batch_size + BLOCK_SIZE - 1) / BLOCK_SIZE);
+	// idx : batch_size*topK*sizeof(int)
+	// float : batch_size*topK*sizeof(float)
 	get_key_val_kernel <<< grid_size, block_size, 0, nullptr >>> (param.batch_size, src, srcWidth, srcHeight, srcArea, idx, conf);
 	// 对每个batch中的框(topK)进行排序, 更新 idx 
 	for (size_t i = 0; i < param.batch_size; i++)
@@ -715,7 +737,7 @@ void nmsDeviceV2(utils::InitParameter param, float* src, int srcWidth, int srcHe
 		int* p_idx = idx + i * srcHeight;
 		float* p_conf = conf + i * srcHeight;
 		// thrust::sort_by_key: 根据key(置信度)排序，同时重排对应的value(索引)
-    	// thrust::greater<float>(): 降序排序
+    	// thrust::greater<float>(): 降序排序(排序规则)
 		thrust::sort_by_key(
 			thrust::device,           // 在GPU上执行
 			p_conf,                   // key数组起始

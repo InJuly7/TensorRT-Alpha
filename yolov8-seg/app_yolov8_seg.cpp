@@ -13,7 +13,7 @@ void setParameters(utils::InitParameter& initParameters)
 	initParameters.input_output_names = { "images",  "output0" };
 	initParameters.conf_thresh = 0.25f;
 	initParameters.iou_thresh = 0.7f;
-	initParameters.save_path = "D:/Data/1/";
+	initParameters.save_path = "/usr/local/data/program/Tingshuo/TensorRT-Alpha/yolov8-seg/";
 }
 
 void task(YOLOv8Seg& yolo, const utils::InitParameter& param, std::vector<cv::Mat>& imgsBatch, const int& delayTime, const int& batchi)
@@ -24,8 +24,8 @@ void task(YOLOv8Seg& yolo, const utils::InitParameter& param, std::vector<cv::Ma
 	utils::DeviceTimer d_t3; yolo.postprocess(imgsBatch); float t3 = d_t3.getUsedTime();
 	float avg_times[3] = { t1 / param.batch_size, t2 / param.batch_size, t3 / param.batch_size };
 	sample::gLogInfo << "preprocess time = " << avg_times[0] << "; "
-		"infer time = " << avg_times[1] << "; "
-		"postprocess time = " << avg_times[2] << std::endl;
+					 << "infer time = " << avg_times[1] << "; "
+					 << "postprocess time = " << avg_times[2] << std::endl;
 	yolo.showAndSave(param.class_names, delayTime, imgsBatch);
 	yolo.reset();
 }
@@ -45,9 +45,9 @@ int main(int argc, char** argv)
 		});
 	utils::InitParameter param;
 	setParameters(param);
-	std::string model_path = "../../data/yolov8/yolov8n-seg.trt";
-	std::string video_path = "../../data/people.mp4";
-	std::string image_path = "../../data/bus.jpg";
+	std::string model_path = "/usr/local/data/model/yolov8m-seg.trt";
+	std::string video_path = "/usr/local/data/program/Tingshuo/TensorRT-Alpha/data/people.mp4";
+	std::string image_path = "/usr/local/data/program/Tingshuo/TensorRT-Alpha/data/bus.jpg";
 	int camera_id = 0;
 	utils::InputStream source;
 	source = utils::InputStream::IMAGE;
@@ -108,8 +108,7 @@ int main(int argc, char** argv)
 	int total_batches = 0;
 	int delay_time = 1;
 	cv::VideoCapture capture;
-	if (!setInputStream(source, image_path, video_path, camera_id,
-		capture, total_batches, delay_time, param))
+	if (!setInputStream(source, image_path, video_path, camera_id, capture, total_batches, delay_time, param))
 	{
 		sample::gLogError << "read the input data errors!" << std::endl;
 		return -1;
@@ -130,8 +129,9 @@ int main(int argc, char** argv)
 	yolo.check();
 	cv::Mat frame;
 	std::vector<cv::Mat> imgs_batch;
+	// 预先分配空间,避免后续插入元素时频繁重新分配内存
 	imgs_batch.reserve(param.batch_size);
-	sample::gLogInfo << imgs_batch.capacity() << std::endl;
+	sample::gLogInfo << "Batch_size: " << imgs_batch.capacity() << std::endl;
 	int batchi = 0;
 	while (capture.isOpened())
 	{
@@ -169,5 +169,5 @@ int main(int argc, char** argv)
 			batchi++;
 		}
 	}
-	return  -1;
+	return 0;
 }

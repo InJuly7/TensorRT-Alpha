@@ -35,11 +35,12 @@ YOLOv8Seg::~YOLOv8Seg()
 
 bool YOLOv8Seg::init(const std::vector<unsigned char>& trtFile)
 {
+    std::cout << "YOLOV8Seg::init Debug Start: " << std::endl;
     if (trtFile.empty())
     {
         return false;
     }
-    std::unique_ptr<nvinfer1::IRuntime> runtime =
+    std::unique_ptr<nvinfer1::IRuntime> runtime = 
         std::unique_ptr<nvinfer1::IRuntime>(nvinfer1::createInferRuntime(sample::gLogger.getTRTLogger()));
     if (runtime == nullptr)
     {
@@ -61,8 +62,43 @@ bool YOLOv8Seg::init(const std::vector<unsigned char>& trtFile)
         this->m_context->setBindingDimensions(0, nvinfer1::Dims4(m_param.batch_size, 3, m_param.dst_h, m_param.dst_w));
     }
 
+	// 列出所有的绑定信息
+	int numBindings = this->m_engine->getNbBindings();
+	std::cout << "	Total number of bindings: " << numBindings << std::endl;
+
+	for (int i = 0; i < numBindings; i++) {
+		nvinfer1::Dims dims = this->m_context->getBindingDimensions(i);
+		std::string name = this->m_engine->getBindingName(i);
+		bool isInput = this->m_engine->bindingIsInput(i);
+		
+		std::cout << "	Binding " << i << ": " << name 
+				<< " (Type: " << (isInput ? "Input" : "Output") << ")" << std::endl;
+		
+		std::cout << "	Dimensions: [";
+		for (int j = 0; j < dims.nbDims; j++) {
+			std::cout << dims.d[j];
+			if (j < dims.nbDims - 1) std::cout << ", ";
+		}
+		std::cout << "]" << std::endl;
+		
+		// 获取数据类型
+		nvinfer1::DataType dataType = this->m_engine->getBindingDataType(i);
+		std::cout << "	Data Type: ";
+		switch (dataType) {
+			case nvinfer1::DataType::kFLOAT: std::cout << "FLOAT"; break;
+			case nvinfer1::DataType::kHALF: std::cout << "HALF"; break;
+			case nvinfer1::DataType::kINT8: std::cout << "INT8"; break;
+			case nvinfer1::DataType::kINT32: std::cout << "INT32"; break;
+			case nvinfer1::DataType::kBOOL: std::cout << "BOOL"; break;
+			default: std::cout << "UNKNOWN";
+		}
+		std::cout << std::endl << std::endl;
+	}
+
+	// [1,116,8400]
     m_output_dims = this->m_context->getBindingDimensions(2);
     m_total_objects = m_output_dims.d[2];
+    std::cout << "	m_total_objects: " << m_total_objects << std::endl;
     assert(m_param.batch_size <= m_output_dims.d[0]);
     m_output_area = 1; // 116 * 8400
     for (int i = 1; i < m_output_dims.nbDims; i++)
@@ -72,7 +108,9 @@ bool YOLOv8Seg::init(const std::vector<unsigned char>& trtFile)
             m_output_area *= m_output_dims.d[i];
         }
     }
-  
+	std::cout << "	m_output_area: " << m_output_area << std::endl;
+	
+	// [1,32,160,160]
     m_output_seg_dims = this->m_context->getBindingDimensions(1);
     assert(m_param.batch_size <= m_output_seg_dims.d[0]);
     m_output_seg_area = 1; // 32 * 160 * 160
@@ -83,7 +121,8 @@ bool YOLOv8Seg::init(const std::vector<unsigned char>& trtFile)
             m_output_seg_area *= m_output_seg_dims.d[i];
         }
     }
-   
+	std::cout << "	m_output_seg_area: " << m_output_seg_area << std::endl;
+
     CHECK(cudaMalloc(&m_output_src_device, m_param.batch_size * m_output_area * sizeof(float)));
     CHECK(cudaMalloc(&m_output_src_transpose_device, m_param.batch_size * m_output_area * sizeof(float)));
     CHECK(cudaMalloc(&m_output_seg_device, m_param.batch_size * m_output_seg_area * sizeof(float)));
@@ -92,8 +131,11 @@ bool YOLOv8Seg::init(const std::vector<unsigned char>& trtFile)
     float a = float(m_param.dst_h) / m_param.src_h;
     float b = float(m_param.dst_w) / m_param.src_w;
     float scale = a < b ? a : b;
-    cv::Mat src2dst = (cv::Mat_<float>(2, 3) << scale, 0.f, (-scale * m_param.src_w + m_param.dst_w + scale - 1) * 0.5,
-        0.f, scale, (-scale * m_param.src_h + m_param.dst_h + scale - 1) * 0.5);
+	std::cout << "	m_param.src_h: " << m_param.src_h << "	m_param.src_w: " << m_param.src_w << std::endl;
+	std::cout << "	m_param.dst_h: " << m_param.dst_h << "	m_param.dst_w: " << m_param.dst_w << std::endl;
+	std::cout << "	a: " << a << " b: " << b << " scale: " << scale << std::endl;
+    cv::Mat src2dst = (cv::Mat_<float>(2, 3) << scale, 0.f, (-scale * m_param.src_w + m_param.dst_w + scale - 1) * 0.5, 
+												0.f, scale, (-scale * m_param.src_h + m_param.dst_h + scale - 1) * 0.5);
     cv::Mat dst2src = cv::Mat::zeros(2, 3, CV_32FC1);
     cv::invertAffineTransform(src2dst, dst2src);
     m_dst2src.v0 = dst2src.ptr<float>(0)[0];
@@ -102,37 +144,40 @@ bool YOLOv8Seg::init(const std::vector<unsigned char>& trtFile)
     m_dst2src.v3 = dst2src.ptr<float>(1)[0];
     m_dst2src.v4 = dst2src.ptr<float>(1)[1];
     m_dst2src.v5 = dst2src.ptr<float>(1)[2];
+	std::cout << "	m_dst2src.v0: " << m_dst2src.v0 << " m_dst2src.v1: " << m_dst2src.v1 << " m_dst2src.v2: " << m_dst2src.v2 << std::endl;
+	std::cout << "	m_dst2src.v3: " << m_dst2src.v3 << " m_dst2src.v4: " << m_dst2src.v4 << " m_dst2src.v5: " << m_dst2src.v5 << std::endl;
     return true;
 }
 
 void YOLOv8Seg::preprocess(const std::vector<cv::Mat>& imgsBatch)
 {
-    resizeDevice(m_param.batch_size, m_input_src_device, m_param.src_w, m_param.src_h,
-        m_input_resize_device, m_param.dst_w, m_param.dst_h, 114, m_dst2src);
-    bgr2rgbDevice(m_param.batch_size, m_input_resize_device, m_param.dst_w, m_param.dst_h,
-        m_input_rgb_device, m_param.dst_w, m_param.dst_h);
-    normDevice(m_param.batch_size, m_input_rgb_device, m_param.dst_w, m_param.dst_h,
-        m_input_norm_device, m_param.dst_w, m_param.dst_h, m_param);
-    hwc2chwDevice(m_param.batch_size, m_input_norm_device, m_param.dst_w, m_param.dst_h,
-        m_input_hwc_device, m_param.dst_w, m_param.dst_h);
+    resizeDevice(m_param.batch_size, m_input_src_device, m_param.src_w, m_param.src_h, m_input_resize_device, m_param.dst_w, m_param.dst_h, 
+					114, m_dst2src);
+    bgr2rgbDevice(m_param.batch_size, m_input_resize_device, m_param.dst_w, m_param.dst_h, m_input_rgb_device, m_param.dst_w, 
+					m_param.dst_h);
+    normDevice(m_param.batch_size, m_input_rgb_device, m_param.dst_w, m_param.dst_h, m_input_norm_device, m_param.dst_w, 
+				m_param.dst_h, m_param);
+    hwc2chwDevice(m_param.batch_size, m_input_norm_device, m_param.dst_w, m_param.dst_h, m_input_hwc_device, m_param.dst_w, m_param.dst_h);
 }
 
 bool YOLOv8Seg::infer()
 {
-    float* bindings[] = { m_input_hwc_device, m_output_seg_device, m_output_src_device };
+    float* bindings[] = {m_input_hwc_device, m_output_seg_device, m_output_src_device};
     bool context = m_context->executeV2((void**)bindings);
     return context;
 }
 
 void YOLOv8Seg::postprocess(const std::vector<cv::Mat>& imgsBatch)
 {
-    yolov8seg::transposeDevice(m_param, m_output_src_device, m_total_objects, m_output_src_width, m_total_objects * m_output_src_width,
-        m_output_src_transpose_device, m_output_src_width, m_total_objects);
-    yolov8seg::decodeDevice(m_param, m_output_src_transpose_device, m_output_src_width, m_total_objects, m_output_area,
-        m_output_objects_device, m_output_objects_width, m_param.topK);
+    yolov8seg::transposeDevice(m_param, m_output_src_device, m_total_objects, m_output_src_width, m_total_objects * m_output_src_width, 
+								m_output_src_transpose_device, m_output_src_width, m_total_objects);
+    yolov8seg::decodeDevice(m_param, m_output_src_transpose_device, m_output_src_width, m_total_objects, m_output_area, 
+							m_output_objects_device, m_output_objects_width, m_param.topK);
     nmsDeviceV1(m_param, m_output_objects_device, m_output_objects_width, m_param.topK, m_output_obj_area);
-    CHECK(cudaMemcpy(m_output_objects_host, m_output_objects_device, m_param.batch_size * sizeof(float) * m_output_obj_area, cudaMemcpyDeviceToHost));
-    CHECK(cudaMemcpy(m_output_seg_host, m_output_seg_device, m_param.batch_size * sizeof(float) * m_output_seg_area, cudaMemcpyDeviceToHost));
+    CHECK(cudaMemcpy(m_output_objects_host, m_output_objects_device, m_param.batch_size * sizeof(float) * m_output_obj_area, 
+						cudaMemcpyDeviceToHost));
+    CHECK(cudaMemcpy(m_output_seg_host, m_output_seg_device, m_param.batch_size * sizeof(float) * m_output_seg_area, 
+						cudaMemcpyDeviceToHost));
 }
 
 void YOLOv8Seg::reset()
@@ -142,9 +187,10 @@ void YOLOv8Seg::reset()
 
 void YOLOv8Seg::showAndSave(const std::vector<std::string>& classNames, const int& cvDelayTime, std::vector<cv::Mat>& imgsBatch)
 {
+	
     cv::Point bbox_points[1][4];
     const cv::Point* bbox_point0[1] = { bbox_points[0] };
-    int num_points[] = { 4 };
+    int num_points[] = {4};
     for (size_t bi = 0; bi < imgsBatch.size(); bi++)
     {
         int num_boxes = std::min((int)(m_output_objects_host + bi * m_output_obj_area)[0], m_param.topK);
@@ -208,7 +254,8 @@ void YOLOv8Seg::showAndSave(const std::vector<std::string>& classNames, const in
                 bbox_points[0][2] = cv::Point(x_lt_src + det_info.size() * m_param.char_width, y_lt_src - m_param.det_info_render_width);
                 bbox_points[0][3] = cv::Point(x_lt_src, y_lt_src - m_param.det_info_render_width);
                 cv::fillPoly(imgsBatch[bi], bbox_point0, num_points, 1, color);
-                cv::putText(imgsBatch[bi], det_info, bbox_points[0][0], cv::FONT_HERSHEY_DUPLEX, m_param.font_scale, cv::Scalar(255, 255, 255), 1, cv::LINE_AA);
+                cv::putText(imgsBatch[bi], det_info, bbox_points[0][0], cv::FONT_HERSHEY_DUPLEX, m_param.font_scale, 
+							cv::Scalar(255, 255, 255), 1, cv::LINE_AA);
             }
         }
         if (m_param.is_show)

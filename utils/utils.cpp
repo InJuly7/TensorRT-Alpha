@@ -62,8 +62,9 @@ std::string utils::getSystemTimeStr()
 	return std::to_string(std::rand()); 
 }
 
-bool utils::setInputStream(const utils::InputStream& source, const std::string& imagePath, const std::string& videoPath, const int& cameraID,
-	cv::VideoCapture& capture, int& totalBatches, int& delayTime, utils::InitParameter& param)
+bool utils::setInputStream(const utils::InputStream& source, const std::string& imagePath, const std::string& videoPath, 
+							const int& cameraID, cv::VideoCapture& capture, int& totalBatches, int& delayTime, 
+							utils::InitParameter& param)
 {
 	int total_frames = 0;
 	std::string img_format;
