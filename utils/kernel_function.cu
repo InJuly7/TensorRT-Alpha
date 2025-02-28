@@ -426,9 +426,9 @@ void resizeDevice(const int& batchSize, float* src, int srcWidth, int srcHeight,
 	}
 }
 
-void bgr2rgbDevice(const int& batchSize, float* src, int srcWidth, int srcHeight,
-					float* dst, int dstWidth, int dstHeight)
+void bgr2rgbDevice(const int& batchSize, float* src, int srcWidth, int srcHeight, float* dst, int dstWidth, int dstHeight)
 {
+	std::cout << "Debug bgr2rgbDevice Start:" << std::endl;
 	dim3 block_size(BLOCK_SIZE, BLOCK_SIZE);
 	dim3 grid_size((dstWidth * dstHeight * 3 + BLOCK_SIZE - 1) / BLOCK_SIZE, (batchSize + BLOCK_SIZE - 1) / BLOCK_SIZE);
 
@@ -436,7 +436,12 @@ void bgr2rgbDevice(const int& batchSize, float* src, int srcWidth, int srcHeight
 	int img_area = srcHeight * srcWidth;
 	int img_height = srcHeight;
 	int img_width = srcWidth;
+	std::cout << "	img_volume: " << img_volume << std::endl;
+	std::cout << "	img_area: " << img_area << std::endl;
+	std::cout << "	img_height: " << img_height << std::endl;
+	std::cout << "	img_width: " << img_width << std::endl;		
 	bgr2rgb_device_kernel <<< grid_size, block_size, 0, nullptr >>> (src, dst, batchSize, img_height, img_width, img_area, img_volume);
+	std::cout << "Debug bgr2rgbDevice Ends:" << std::endl;
 }
 
 void normDevice(const int& batchSize, float* src, int srcWidth, int srcHeight, float* dst, int dstWidth, int dstHeight, 
@@ -467,16 +472,21 @@ void normDevice(const int& batchSize, float* src, int srcWidth, int srcHeight, f
 	std::cout << "Debug normDevice Ends;" << std::endl;
 }
 
-void hwc2chwDevice(const int& batchSize, float* src, int srcWidth, int srcHeight,
-	float* dst, int dstWidth, int dstHeight)
+void hwc2chwDevice(const int& batchSize, float* src, int srcWidth, int srcHeight, float* dst, int dstWidth, int dstHeight)
 {
+	std::cout << "Debug hwc2chwDevice Start:" << std::endl;
 	dim3 block_size(BLOCK_SIZE, BLOCK_SIZE);
 	dim3 grid_size((dstWidth * dstHeight * 3 + BLOCK_SIZE - 1) / BLOCK_SIZE, (batchSize + BLOCK_SIZE - 1) / BLOCK_SIZE);
 	int img_volume = 3 * srcHeight * srcWidth;
 	int img_area = srcHeight * srcWidth;
 	int img_height = srcHeight;
 	int img_width = srcWidth;
+	std::cout << "	img_volume: " << img_volume << std::endl;
+	std::cout << "	img_area: " << img_area << std::endl;
+	std::cout << "	img_height: " << img_height << std::endl;
+	std::cout << "	img_width: " << img_width << std::endl;	
 	hwc2chw_device_kernel << < grid_size, block_size, 0, nullptr >> > (src, dst, batchSize, img_height, img_width, img_area, img_volume);
+	std::cout << "Debug hwc2chwDevice Ends:" << std::endl;
 }
 
 __global__ 
@@ -697,11 +707,18 @@ void decodeDevice(utils::InitParameter param, float* src, int srcWidth, int srcH
 
 void nmsDeviceV1(utils::InitParameter param, float* src, int srcWidth, int srcHeight, int srcArea)
 {
+	std::cout << "Debug nmsDeviceV1 Start:" << std::endl;
 	dim3 block_size(BLOCK_SIZE, BLOCK_SIZE);
 	dim3 grid_size((param.topK + BLOCK_SIZE - 1) / BLOCK_SIZE, (param.batch_size + BLOCK_SIZE - 1) / BLOCK_SIZE);
-
+	std::cout << "	param.topK: " << param.topK << std::endl;
+	std::cout << "	param.batch_size: " << param.batch_size << std::endl;
+	std::cout << "	param.iou_thresh: " << param.iou_thresh << std::endl;
+	std::cout << "	srcWidth: " << srcWidth << std::endl;
+	std::cout << "	srcHeight: " << srcHeight << std::endl;
+	std::cout << "	srcArea: " << srcArea << std::endl;	
 	nms_fast_kernel <<< grid_size, block_size, 0, nullptr >>> (param.topK, param.batch_size, param.iou_thresh, src, srcWidth, srcHeight, 
 																srcArea);
+	std::cout << "Debug nmsDeviceV1 Ends:" << std::endl;
 }
 
 void nmsDeviceV2(utils::InitParameter param, float* src, int srcWidth, int srcHeight, int srcArea, int* idx, float* conf)
