@@ -1,50 +1,47 @@
 #include <iostream>
-#include <string>
-
-// 基类
-class Animal {
-private:
-    std::string name;
-    int age;
-
-public:
-    // 基类构造函数
-    Animal(const std::string& name, int age) : name(name), age(age) {
-        std::cout << "Animal 构造函数执行: 创建 " << name << "，年龄 " << age << std::endl;
-    }
-    
-    std::string getName() const { return name; }
-    int getAge() const { return age; }
-};
-
-// 派生类
-class Dog : public Animal {
-private:
-    std::string breed;
-
-public:
-    // 派生类构造函数，通过初始化列表调用基类构造函数
-    Dog(const std::string& name, int age, const std::string& breed) 
-        : Animal(name, age), // 调用基类构造函数
-          breed(breed)       // 初始化派生类成员
-    {
-        // 派生类构造函数主体
-        std::cout << "Dog 构造函数执行: " << getName() << " 是一只 " << breed << " 品种" << std::endl;
-    }
-
-    std::string getBreed() const { return breed; }
-};
+#include<Eigen/Dense>
+#include <vector>
+#include <iomanip>
 
 int main() {
-    std::cout << "开始创建Dog对象..." << std::endl;
+    // 创建一个3x10x10的张量，填充1到300的值
+    const int depth = 3;
+    const int height = 10;
+    const int width = 10;
+    const int total_size = depth * height * width;
     
-    // 创建Dog对象时，会先调用Animal构造函数，再执行Dog构造函数主体
-    Dog myDog("旺财", 3, "金毛寻回犬");
+    // 创建一维数组来存储所有数据
+    std::vector<float> tensor_data(total_size);
     
-    std::cout << "\n对象信息摘要:" << std::endl;
-    std::cout << "名字: " << myDog.getName() << std::endl;
-    std::cout << "年龄: " << myDog.getAge() << std::endl;
-    std::cout << "品种: " << myDog.getBreed() << std::endl;
+    // 填充1到300的值
+    for (int i = 0; i < total_size; ++i) {
+        tensor_data[i] = i + 1;
+    }
+    // 为了更好地理解内存排布，也打印原始数据的3D结构
+    std::cout << "\nOriginal 3D Tensor (3x10x10):" << std::endl;
+    for (int d = 0; d < depth; ++d) {
+        std::cout << "Channel " << d << ":" << std::endl;
+        for (int h = 0; h < height; ++h) {
+            for (int w = 0; w < width; ++w) {
+                int index = d * (height * width) + h * width + w;
+                std::cout << std::setw(4) << tensor_data[index];
+            }
+            std::cout << std::endl;
+        }
+        std::cout << std::endl;
+    }
+    
+
+
+    // 使用Eigen::Map将数据映射为矩阵
+    // 注意：这里将3x10x10的数据映射为100x3的矩阵
+    Eigen::Map<Eigen::MatrixXf> img_seg_(tensor_data.data(), 100, 3);
+    
+    // 打印映射后的矩阵
+    std::cout << "Mapped Matrix (100x3):" << std::endl;
+    std::cout << std::fixed << std::setprecision(0); // 设置打印格式
+    std::cout << img_seg_ << std::endl;
+    
     
     return 0;
 }

@@ -36,7 +36,6 @@ YOLOv8Seg::~YOLOv8Seg()
 bool YOLOv8Seg::init(const std::vector<unsigned char>& trtFile)
 {
     std::cout << "YOLOV8Seg::init Debug Start: " << std::endl;
-    std::cout << "YOLOV8Seg::init Debug Start: " << std::endl;
     if (trtFile.empty())
     {
         return false;
@@ -62,39 +61,6 @@ bool YOLOv8Seg::init(const std::vector<unsigned char>& trtFile)
     {
         this->m_context->setBindingDimensions(0, nvinfer1::Dims4(m_param.batch_size, 3, m_param.dst_h, m_param.dst_w));
     }
-
-	// 列出所有的绑定信息
-	int numBindings = this->m_engine->getNbBindings();
-	std::cout << "Total number of bindings: " << numBindings << std::endl;
-
-	for (int i = 0; i < numBindings; i++) {
-		nvinfer1::Dims dims = this->m_context->getBindingDimensions(i);
-		std::string name = this->m_engine->getBindingName(i);
-		bool isInput = this->m_engine->bindingIsInput(i);
-		
-		std::cout << "Binding " << i << ": " << name 
-				<< " (Type: " << (isInput ? "Input" : "Output") << ")" << std::endl;
-		
-		std::cout << "  Dimensions: [";
-		for (int j = 0; j < dims.nbDims; j++) {
-			std::cout << dims.d[j];
-			if (j < dims.nbDims - 1) std::cout << ", ";
-		}
-		std::cout << "]" << std::endl;
-		
-		// 获取数据类型
-		nvinfer1::DataType dataType = this->m_engine->getBindingDataType(i);
-		std::cout << "  Data Type: ";
-		switch (dataType) {
-			case nvinfer1::DataType::kFLOAT: std::cout << "FLOAT"; break;
-			case nvinfer1::DataType::kHALF: std::cout << "HALF"; break;
-			case nvinfer1::DataType::kINT8: std::cout << "INT8"; break;
-			case nvinfer1::DataType::kINT32: std::cout << "INT32"; break;
-			case nvinfer1::DataType::kBOOL: std::cout << "BOOL"; break;
-			default: std::cout << "UNKNOWN";
-		}
-		std::cout << std::endl << std::endl;
-	}
 
 	// 列出所有的绑定信息
 	int numBindings = this->m_engine->getNbBindings();
@@ -220,45 +186,62 @@ void YOLOv8Seg::reset()
 
 void YOLOv8Seg::showAndSave(const std::vector<std::string>& classNames, const int& cvDelayTime, std::vector<cv::Mat>& imgsBatch)
 {
-	
+    std::cout << "YOLOv8Seg::showAndSave Debug Start: " << std::endl;
     cv::Point bbox_points[1][4];
-    const cv::Point* bbox_point0[1] = { bbox_points[0] };
+    const cv::Point* bbox_point0[1] = {bbox_points[0]};
     int num_points[] = {4};
     for (size_t bi = 0; bi < imgsBatch.size(); bi++)
     {
         int num_boxes = std::min((int)(m_output_objects_host + bi * m_output_obj_area)[0], m_param.topK);
+        std::cout << "	num_boxes: " << num_boxes << std::endl;
+
         float* p_seg = m_output_seg_host + bi * m_output_seg_area;
+        // [160*160,32] 转秩; 原型掩码矩阵
         Eigen::Map<Eigen::MatrixXf> img_seg_(p_seg, m_output_seg_w, m_output_seg_h);
+        std::cout << "  m_output_seg_h: " << m_output_seg_h << "; m_output_seg_w: " << m_output_seg_w << std::endl;
         int m_output_obj_area_bi = bi * m_output_obj_area;
+        std::cout << "  m_output_obj_area_bi: " << m_output_obj_area_bi << std::endl;
         m_img_canvas.setTo(cv::Scalar(0, 0, 0));
         for (size_t i = 0; i < num_boxes; i++)
         {
             float* ptr = m_output_objects_host + m_output_obj_area_bi + m_output_objects_width * i + 1;
+            // 校验是否被NMS滤掉
             if (ptr[6])
             {
                 int label = ptr[5];
+                std::cout << "  label: " << label << std::endl;
                 cv::Scalar color = utils::Colors::color80[label];
-         
+                // [32,1] 分割编码系数
                 Eigen::Map<Eigen::MatrixXf> img_ojb_seg_(ptr + 7, m_output_seg_h, 1); 
+                // [160*160,1] 计算物体的分割掩码 
                 m_mask_eigen160 = img_seg_ * img_ojb_seg_;
                 cv::eigen2cv(m_mask_eigen160, m_mask160);
+                // sigmoid 函数: 1/(1+e^(-x)) 表示掩码概率
                 cv::exp(-m_mask160, m_mask160); 
-                m_mask160 = 1.f / (1.f + m_mask160);
+                m_mask160 = 1.f / (1.f + m_mask160); 
+                // [25600,1] --> [160,160]
                 m_mask160 = m_mask160.reshape(1, 160);
-          
+                std::cout << "  m_mask160.shape: " << m_mask160.rows() << " " << m_mask160.cols() << std::endl;
+
+                // 计算检测框在掩码尺度上的坐标
+                // ptr[0:3] left top right bottom
                 int x_lt_160 = std::round(ptr[0] * m_downsample_scale); 
                 int y_lt_160 = std::round(ptr[1] * m_downsample_scale);
                 int x_rb_160 = std::round(ptr[2] * m_downsample_scale);
                 int y_rb_160 = std::round(ptr[3] * m_downsample_scale);
+                // 创建掩码尺度上的感兴趣区域（ROI）
                 cv::Rect roi160 = cv::Rect(x_lt_160, y_lt_160, x_rb_160 - x_lt_160, y_rb_160 - y_lt_160) & m_thresh_roi160;
+                std::cout << "  roi160.shape: " << roi160.rows << " " << roi160.cols << std::endl;
                 if (roi160.width == 0 || roi160.height == 0)
                     continue;
-
+                
+                // 计算检测框在原始图像尺度上的坐标
                 int x_lt_src = std::round(m_dst2src.v0 * ptr[0] + m_dst2src.v1 * ptr[1] + m_dst2src.v2);
                 int y_lt_src = std::round(m_dst2src.v3 * ptr[0] + m_dst2src.v4 * ptr[1] + m_dst2src.v5);
                 int x_rb_src = std::round(m_dst2src.v0 * ptr[2] + m_dst2src.v1 * ptr[3] + m_dst2src.v2);
                 int y_rb_src = std::round(m_dst2src.v3 * ptr[2] + m_dst2src.v4 * ptr[3] + m_dst2src.v5);
                 cv::Rect roisrc = cv::Rect(x_lt_src, y_lt_src, x_rb_src - x_lt_src, y_rb_src - y_lt_src) & m_thresh_roisrc;
+                std::cout << "  roisrc.shape: " << roisrc.rows << " " << roisrc.cols << std::endl;
                 if (roisrc.width == 0 || roisrc.height == 0)
                     continue;      
 
@@ -273,22 +256,27 @@ void YOLOv8Seg::showAndSave(const std::vector<std::string>& classNames, const in
                 // for opencv >=3.2.0
                 cv::Mat mask_instance;
                 cv::resize(cv::Mat(m_mask160, roi160), mask_instance, cv::Size(roisrc.width, roisrc.height), cv::INTER_LINEAR);
+                // 将掩码二值化 - 大于 0.5 的值设为 1（物体），小于等于 0.5 的值设为 0（背景）
                 mask_instance = mask_instance > 0.5f;
                 cv::Mat mask_instance_bgr;
+                // 将单通道掩码转换为 3 通道 BGR 格式，以便应用颜色
                 cv::cvtColor(mask_instance, mask_instance_bgr, cv::COLOR_GRAY2BGR);
+                // 将掩码中的物体区域（值为1的区域）设置为当前类别的颜色
                 mask_instance_bgr.setTo(color, mask_instance);
+                // 将彩色掩码与图像画布叠加 掩码权重为 0.45，原图权重为 1.0，创建半透明效果
                 cv::addWeighted(mask_instance_bgr, 0.45, m_img_canvas(roisrc), 1.0, 0., m_img_canvas(roisrc));
 
                 // label's info
                 cv::rectangle(imgsBatch[bi], roisrc, color, 2, cv::LINE_AA);
                 cv::String det_info = m_param.class_names[label] + " " + cv::format("%.4f", ptr[4]);
+                // 顺时针四个定点
                 bbox_points[0][0] = cv::Point(x_lt_src, y_lt_src);
                 bbox_points[0][1] = cv::Point(x_lt_src + det_info.size() * m_param.char_width, y_lt_src);
                 bbox_points[0][2] = cv::Point(x_lt_src + det_info.size() * m_param.char_width, y_lt_src - m_param.det_info_render_width);
                 bbox_points[0][3] = cv::Point(x_lt_src, y_lt_src - m_param.det_info_render_width);
                 cv::fillPoly(imgsBatch[bi], bbox_point0, num_points, 1, color);
                 cv::putText(imgsBatch[bi], det_info, bbox_points[0][0], cv::FONT_HERSHEY_DUPLEX, m_param.font_scale, 
-							cv::Scalar(255, 255, 255), 1, cv::LINE_AA);
+                            cv::Scalar(255, 255, 255), 1, cv::LINE_AA);
             }
         }
         if (m_param.is_show)

@@ -596,7 +596,7 @@ void nms_fast_kernel(int topK, int batch_size, float iou_thresh, float* src, int
 
 			if (iou > iou_thresh)
 			{
-				// 更改 相同类别小概率的框 置信度
+				// 小概率的框 被NMS 滤掉 
 				pcurrent[6] = 0;
 				return;
 			}
@@ -655,7 +655,7 @@ void nms_sort_kernel(int topK, int batch_size, float iou_thresh, float* src, int
 		if (iou > iou_thresh)
 		{
 			// 框选的是同一个类别, 并且较大概率框选的位置相同 
-			// 将低概率的框置信度设为0
+			// 小概率的框 被NMS 滤掉 
 			pitem[6] = 0; 
 		}
 	}
@@ -736,7 +736,7 @@ void nmsDeviceV2(utils::InitParameter param, float* src, int srcWidth, int srcHe
 	{
 		int* p_idx = idx + i * srcHeight;
 		float* p_conf = conf + i * srcHeight;
-		// thrust::sort_by_key: 根据key(置信度)排序，同时重排对应的value(索引)
+		// thrust::sort_by_key: 根据key(类别概率max)排序，同时重排对应的value(索引)
     	// thrust::greater<float>(): 降序排序(排序规则)
 		thrust::sort_by_key(
 			thrust::device,           // 在GPU上执行
