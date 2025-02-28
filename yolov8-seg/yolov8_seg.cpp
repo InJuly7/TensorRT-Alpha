@@ -36,6 +36,7 @@ YOLOv8Seg::~YOLOv8Seg()
 bool YOLOv8Seg::init(const std::vector<unsigned char>& trtFile)
 {
     std::cout << "YOLOV8Seg::init Debug Start: " << std::endl;
+    std::cout << "YOLOV8Seg::init Debug Start: " << std::endl;
     if (trtFile.empty())
     {
         return false;
@@ -61,6 +62,39 @@ bool YOLOv8Seg::init(const std::vector<unsigned char>& trtFile)
     {
         this->m_context->setBindingDimensions(0, nvinfer1::Dims4(m_param.batch_size, 3, m_param.dst_h, m_param.dst_w));
     }
+
+	// 列出所有的绑定信息
+	int numBindings = this->m_engine->getNbBindings();
+	std::cout << "Total number of bindings: " << numBindings << std::endl;
+
+	for (int i = 0; i < numBindings; i++) {
+		nvinfer1::Dims dims = this->m_context->getBindingDimensions(i);
+		std::string name = this->m_engine->getBindingName(i);
+		bool isInput = this->m_engine->bindingIsInput(i);
+		
+		std::cout << "Binding " << i << ": " << name 
+				<< " (Type: " << (isInput ? "Input" : "Output") << ")" << std::endl;
+		
+		std::cout << "  Dimensions: [";
+		for (int j = 0; j < dims.nbDims; j++) {
+			std::cout << dims.d[j];
+			if (j < dims.nbDims - 1) std::cout << ", ";
+		}
+		std::cout << "]" << std::endl;
+		
+		// 获取数据类型
+		nvinfer1::DataType dataType = this->m_engine->getBindingDataType(i);
+		std::cout << "  Data Type: ";
+		switch (dataType) {
+			case nvinfer1::DataType::kFLOAT: std::cout << "FLOAT"; break;
+			case nvinfer1::DataType::kHALF: std::cout << "HALF"; break;
+			case nvinfer1::DataType::kINT8: std::cout << "INT8"; break;
+			case nvinfer1::DataType::kINT32: std::cout << "INT32"; break;
+			case nvinfer1::DataType::kBOOL: std::cout << "BOOL"; break;
+			default: std::cout << "UNKNOWN";
+		}
+		std::cout << std::endl << std::endl;
+	}
 
 	// 列出所有的绑定信息
 	int numBindings = this->m_engine->getNbBindings();
@@ -122,7 +156,6 @@ bool YOLOv8Seg::init(const std::vector<unsigned char>& trtFile)
         }
     }
 	std::cout << "	m_output_seg_area: " << m_output_seg_area << std::endl;
-
     CHECK(cudaMalloc(&m_output_src_device, m_param.batch_size * m_output_area * sizeof(float)));
     CHECK(cudaMalloc(&m_output_src_transpose_device, m_param.batch_size * m_output_area * sizeof(float)));
     CHECK(cudaMalloc(&m_output_seg_device, m_param.batch_size * m_output_seg_area * sizeof(float)));

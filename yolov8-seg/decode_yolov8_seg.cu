@@ -2,6 +2,8 @@
 
 __global__ void decode_yolov8_seg_device_kernel(int batch_size, int  num_class, int topK, float conf_thresh, float* src, int srcWidth, 
 												int srcHeight, int srcArea, float* dst, int dstWidth, int dstArea)
+__global__ void decode_yolov8_seg_device_kernel(int batch_size, int  num_class, int topK, float conf_thresh, float* src, int srcWidth, 
+												int srcHeight, int srcArea, float* dst, int dstWidth, int dstArea)
 {
 	int dx = blockDim.x * blockIdx.x + threadIdx.x; 
 	int dy = blockDim.y * blockIdx.y + threadIdx.y; 
@@ -78,6 +80,20 @@ void yolov8seg::decodeDevice(utils::InitParameter param, float* src, int srcWidt
 																				param.conf_thresh, src, srcWidth, srcHeight, srcArea, dst, 
 																				dstWidth, dstArea);
 	std::cout << "Debug decodeDevice Ends:" << std::endl;
+	std::cout << "	param.batch_size: " << param.batch_size << std::endl;		
+	std::cout << "	param.num_class: " << param.num_class << std::endl;
+	std::cout << "	param.topK: " << param.topK << std::endl;
+	std::cout << "	param.conf_thresh: " << param.conf_thresh << std::endl;
+	std::cout << "	srcWidth: " << srcWidth << std::endl;
+	std::cout << "	srcHeight: " << srcHeight << std::endl;
+	std::cout << "	srcArea: " << srcArea << std::endl;
+	std::cout << "	dstWidth: " << dstWidth << std::endl;
+	std::cout << "	dstHeight: " << dstHeight << std::endl;
+	std::cout << "	dstArea: " << dstArea << std::endl;
+	decode_yolov8_seg_device_kernel <<< grid_size, block_size, 0, nullptr >>> (param.batch_size, param.num_class, param.topK, 
+																				param.conf_thresh, src, srcWidth, srcHeight, srcArea, dst, 
+																				dstWidth, dstArea);
+	std::cout << "Debug decodeDevice Ends:" << std::endl;
 }
 
 __global__ void transpose_device_kernel(int batch_size, float* src, int srcWidth, int srcHeight, int srcArea, float* dst, int dstWidth, 
@@ -102,9 +118,20 @@ void yolov8seg::transposeDevice(utils::InitParameter param, float* src, int srcW
 								int dstHeight)
 {
 	std::cout << "Debug transposeDevice Start:" << std::endl;
+	std::cout << "Debug transposeDevice Start:" << std::endl;
 	dim3 block_size(BLOCK_SIZE, BLOCK_SIZE);
 	dim3 grid_size((dstHeight + BLOCK_SIZE - 1) / BLOCK_SIZE, (param.batch_size + BLOCK_SIZE - 1) / BLOCK_SIZE); 
+	dim3 grid_size((dstHeight + BLOCK_SIZE - 1) / BLOCK_SIZE, (param.batch_size + BLOCK_SIZE - 1) / BLOCK_SIZE); 
 	int dstArea = dstWidth * dstHeight;
+	std::cout << "	srcWidth: " << srcWidth << std::endl;
+	std::cout << "	srcHeight: " << srcHeight << std::endl;
+	std::cout << "	srcArea: " << srcArea << std::endl;
+	std::cout << "	dstWidth: " << dstWidth << std::endl;
+	std::cout << "	dstHeight: " << dstHeight << std::endl;
+	std::cout << "	dstArea: " << dstArea << std::endl;		
+	transpose_device_kernel <<< grid_size, block_size, 0, nullptr >>> (param.batch_size, src, srcWidth, srcHeight, srcArea, dst, dstWidth, 
+																		dstHeight, dstArea);
+	std::cout << "Debug transposeDevice Ends:" << std::endl;
 	std::cout << "	srcWidth: " << srcWidth << std::endl;
 	std::cout << "	srcHeight: " << srcHeight << std::endl;
 	std::cout << "	srcArea: " << srcArea << std::endl;
