@@ -62,8 +62,9 @@ std::string utils::getSystemTimeStr()
 	return std::to_string(std::rand()); 
 }
 
-bool utils::setInputStream(const utils::InputStream& source, const std::string& imagePath, const std::string& videoPath, const int& cameraID,
-	cv::VideoCapture& capture, int& totalBatches, int& delayTime, utils::InitParameter& param)
+bool utils::setInputStream(const utils::InputStream& source, const std::string& imagePath, const std::string& videoPath, 
+							const int& cameraID, cv::VideoCapture& capture, int& totalBatches, int& delayTime, 
+							utils::InitParameter& param)
 {
 	int total_frames = 0;
 	std::string img_format;
@@ -143,6 +144,7 @@ std::string utils::getTimeStamp()
 void utils::show(const std::vector<std::vector<utils::Box>>& objectss, const std::vector<std::string>& classNames,
 	const int& cvDelayTime, std::vector<cv::Mat>& imgsBatch)
 {
+	std::cout << "Debug utils::show Start: " << std::endl;
 	std::string windows_title = "image";
 	if(!imgsBatch[0].empty())
 	{
@@ -202,9 +204,10 @@ void utils::show(const std::vector<std::vector<utils::Box>>& objectss, const std
 	}
 }
 
-void utils::save(const std::vector<std::vector<Box>>& objectss, const std::vector<std::string>& classNames,
-	const std::string& savePath, std::vector<cv::Mat>& imgsBatch, const int& batchSize, const int& batchi)
+void utils::save(const std::vector<std::vector<Box>>& objectss, const std::vector<std::string>& classNames, const std::string& savePath, 
+					std::vector<cv::Mat>& imgsBatch, const int& batchSize, const int& batchi)
 {
+	std::cout << "Debug utils::save Start: " << std::endl;
 	cv::Scalar color = cv::Scalar(0, 255, 0);
 	cv::Point bbox_points[1][4];
 	const cv::Point* bbox_point0[1] = { bbox_points[0] };
@@ -227,7 +230,7 @@ void utils::save(const std::vector<std::vector<Box>>& objectss, const std::vecto
 				{
 					color = Colors::color20[box.label];
 				}
-				cv::rectangle(imgsBatch[bi], cv::Point(box.left, box.top), cv::Point(box.right, box.bottom), color, 2, cv::LINE_AA);
+				cv::rectangle(imgsBatch[bi], cv::Point(box.left, box.top), cv::Point(box.right, box.bottom), color, 1, cv::LINE_AA);
 				cv::String det_info = classNames[box.label] + " " + cv::format("%.4f", box.confidence);
 				bbox_points[0][0] = cv::Point(box.left, box.top);
 				bbox_points[0][1] = cv::Point(box.left + det_info.size() * 11, box.top);

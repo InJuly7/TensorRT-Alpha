@@ -115,8 +115,7 @@ int main(int argc, char** argv)
 	int total_batches = 0;
 	int delay_time = 1;
 	cv::VideoCapture capture;
-	if (!setInputStream(source, image_path, video_path, camera_id,
-		capture, total_batches, delay_time, param))
+	if (!setInputStream(source, image_path, video_path, camera_id, capture, total_batches, delay_time, param))
 	{
 		sample::gLogError << "read the input data errors!" << std::endl;
 		return -1;
@@ -181,5 +180,5 @@ int main(int argc, char** argv)
 			batchi++;
 		}
 	}
-	return  -1;
+	return 0;
 }

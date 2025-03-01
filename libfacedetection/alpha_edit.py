@@ -1,12 +1,12 @@
 import argparse
 from pyexpat import model
-from turtle import width
+# from turtle import width
 import onnx
 import onnx.checker
 import onnx.utils
 from onnx.tools import update_model_dims
 import onnx.helper as helper
-import torch
+# import torch
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
