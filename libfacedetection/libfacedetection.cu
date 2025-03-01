@@ -235,8 +235,7 @@ void LibFaceDet::copy(const std::vector<cv::Mat>& imgsBatch)
 
 void LibFaceDet::preprocess(const std::vector<cv::Mat>& imgsBatch)
 {
-    hwc2chwDevice(m_param.batch_size, m_input_src_device, m_param.src_w, m_param.src_h,
-        m_input_hwc_device, m_param.src_w, m_param.src_h);
+    hwc2chwDevice(m_param.batch_size, m_input_src_device, m_param.src_w, m_param.src_h, m_input_hwc_device, m_param.src_w, m_param.src_h);
 }
 
 bool LibFaceDet::infer()

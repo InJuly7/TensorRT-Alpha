@@ -729,7 +729,8 @@ void nmsDeviceV2(utils::InitParameter param, float* src, int srcWidth, int srcHe
 	dim3 block_size(BLOCK_SIZE, BLOCK_SIZE);
 	dim3 grid_size((param.topK + BLOCK_SIZE - 1) / BLOCK_SIZE, (param.batch_size + BLOCK_SIZE - 1) / BLOCK_SIZE);
 	// idx : batch_size*topK*sizeof(int)
-	// float : batch_size*topK*sizeof(float)
+	// conf : batch_size*topK*sizeof(float)
+	// 可能不需要处理 topk个框
 	get_key_val_kernel <<< grid_size, block_size, 0, nullptr >>> (param.batch_size, src, srcWidth, srcHeight, srcArea, idx, conf);
 	// 对每个batch中的框(topK)进行排序, 更新 idx 
 	for (size_t i = 0; i < param.batch_size; i++)

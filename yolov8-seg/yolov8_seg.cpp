@@ -121,7 +121,7 @@ bool YOLOv8Seg::init(const std::vector<unsigned char>& trtFile)
             m_output_seg_area *= m_output_seg_dims.d[i];
         }
     }
-	std::cout << "	m_output_seg_area: " << m_output_seg_area << std::endl;
+	std::cout << "	m_output_seg_area(32*160*160): " << m_output_seg_area << std::endl;
     CHECK(cudaMalloc(&m_output_src_device, m_param.batch_size * m_output_area * sizeof(float)));
     CHECK(cudaMalloc(&m_output_src_transpose_device, m_param.batch_size * m_output_area * sizeof(float)));
     CHECK(cudaMalloc(&m_output_seg_device, m_param.batch_size * m_output_seg_area * sizeof(float)));
@@ -192,15 +192,16 @@ void YOLOv8Seg::showAndSave(const std::vector<std::string>& classNames, const in
     int num_points[] = {4};
     for (size_t bi = 0; bi < imgsBatch.size(); bi++)
     {
+		// 检测框数量
         int num_boxes = std::min((int)(m_output_objects_host + bi * m_output_obj_area)[0], m_param.topK);
         std::cout << "	num_boxes: " << num_boxes << std::endl;
 
         float* p_seg = m_output_seg_host + bi * m_output_seg_area;
-        // [160*160,32] 转秩; 原型掩码矩阵
+        // [32,160,160] --> [160*160,32] 转秩; 原型掩码矩阵
         Eigen::Map<Eigen::MatrixXf> img_seg_(p_seg, m_output_seg_w, m_output_seg_h);
-        std::cout << "  m_output_seg_h: " << m_output_seg_h << "; m_output_seg_w: " << m_output_seg_w << std::endl;
+        std::cout << "	m_output_seg_h: " << m_output_seg_h << "; m_output_seg_w: " << m_output_seg_w << std::endl;
         int m_output_obj_area_bi = bi * m_output_obj_area;
-        std::cout << "  m_output_obj_area_bi: " << m_output_obj_area_bi << std::endl;
+        std::cout << "	m_output_obj_area_bi: " << m_output_obj_area_bi << std::endl;
         m_img_canvas.setTo(cv::Scalar(0, 0, 0));
         for (size_t i = 0; i < num_boxes; i++)
         {
@@ -209,11 +210,11 @@ void YOLOv8Seg::showAndSave(const std::vector<std::string>& classNames, const in
             if (ptr[6])
             {
                 int label = ptr[5];
-                std::cout << "  label: " << label << std::endl;
+                std::cout << "	label: " << label << std::endl;
                 cv::Scalar color = utils::Colors::color80[label];
                 // [32,1] 分割编码系数
                 Eigen::Map<Eigen::MatrixXf> img_ojb_seg_(ptr + 7, m_output_seg_h, 1); 
-                // [160*160,1] 计算物体的分割掩码 
+                // [160*160,1] 计算物体的分割掩码 , 掩码概率矩阵
                 m_mask_eigen160 = img_seg_ * img_ojb_seg_;
                 cv::eigen2cv(m_mask_eigen160, m_mask160);
                 // sigmoid 函数: 1/(1+e^(-x)) 表示掩码概率
@@ -221,17 +222,19 @@ void YOLOv8Seg::showAndSave(const std::vector<std::string>& classNames, const in
                 m_mask160 = 1.f / (1.f + m_mask160); 
                 // [25600,1] --> [160,160]
                 m_mask160 = m_mask160.reshape(1, 160);
-                std::cout << "  m_mask160.shape: " << m_mask160.rows() << " " << m_mask160.cols() << std::endl;
-
-                // 计算检测框在掩码尺度上的坐标
+                std::cout << "	m_mask160.shape: " << m_mask160.rows << " " << m_mask160.cols << std::endl;
+				std::cout << "	left: " << ptr[0] << "; top: " << ptr[1] << "; right: " << ptr[2] << "; bottom: " << ptr[3] << std::endl; 
+                // 计算检测框在掩码尺度上的坐标 从[640,640]的坐标 映射到 [160,160]的坐标
                 // ptr[0:3] left top right bottom
                 int x_lt_160 = std::round(ptr[0] * m_downsample_scale); 
                 int y_lt_160 = std::round(ptr[1] * m_downsample_scale);
                 int x_rb_160 = std::round(ptr[2] * m_downsample_scale);
                 int y_rb_160 = std::round(ptr[3] * m_downsample_scale);
+				std::cout << "	x_lt_160: " << x_lt_160 << "; y_lt_160: " << y_lt_160 << "; x_rb_160: " << x_rb_160 << "; y_rb_160: " << y_rb_160 << std::endl;
                 // 创建掩码尺度上的感兴趣区域（ROI）
+				// 使用 & 运算符计算掩码尺度矩形与 m_thresh_roi160 的交集, 保证后续掩码操作不会越界
                 cv::Rect roi160 = cv::Rect(x_lt_160, y_lt_160, x_rb_160 - x_lt_160, y_rb_160 - y_lt_160) & m_thresh_roi160;
-                std::cout << "  roi160.shape: " << roi160.rows << " " << roi160.cols << std::endl;
+                std::cout << "	roi160.shape: " << roi160.height << " " << roi160.width << std::endl;
                 if (roi160.width == 0 || roi160.height == 0)
                     continue;
                 
@@ -240,8 +243,10 @@ void YOLOv8Seg::showAndSave(const std::vector<std::string>& classNames, const in
                 int y_lt_src = std::round(m_dst2src.v3 * ptr[0] + m_dst2src.v4 * ptr[1] + m_dst2src.v5);
                 int x_rb_src = std::round(m_dst2src.v0 * ptr[2] + m_dst2src.v1 * ptr[3] + m_dst2src.v2);
                 int y_rb_src = std::round(m_dst2src.v3 * ptr[2] + m_dst2src.v4 * ptr[3] + m_dst2src.v5);
-                cv::Rect roisrc = cv::Rect(x_lt_src, y_lt_src, x_rb_src - x_lt_src, y_rb_src - y_lt_src) & m_thresh_roisrc;
-                std::cout << "  roisrc.shape: " << roisrc.rows << " " << roisrc.cols << std::endl;
+				std::cout << "	x_lt_src: " << x_lt_src << "; y_lt_src: " << y_lt_src << "; x_rb_src: " << x_rb_src << "; y_rb_src: " << y_rb_src << std::endl;
+                // 保证后续操作不会超出原图像尺寸范围
+				cv::Rect roisrc = cv::Rect(x_lt_src, y_lt_src, x_rb_src - x_lt_src, y_rb_src - y_lt_src) & m_thresh_roisrc;
+                std::cout << "	roisrc.shape: " << roisrc.height << " " << roisrc.width << std::endl;
                 if (roisrc.width == 0 || roisrc.height == 0)
                     continue;      
 
@@ -255,6 +260,8 @@ void YOLOv8Seg::showAndSave(const std::vector<std::string>& classNames, const in
 
                 // for opencv >=3.2.0
                 cv::Mat mask_instance;
+				// 从 掩码概率矩阵 m_mask160 中提取 roi160 定义的区域
+				// 使用插值方法 i调整大小到 (roisrc.width, roisrc.height) 尺寸
                 cv::resize(cv::Mat(m_mask160, roi160), mask_instance, cv::Size(roisrc.width, roisrc.height), cv::INTER_LINEAR);
                 // 将掩码二值化 - 大于 0.5 的值设为 1（物体），小于等于 0.5 的值设为 0（背景）
                 mask_instance = mask_instance > 0.5f;
@@ -263,7 +270,7 @@ void YOLOv8Seg::showAndSave(const std::vector<std::string>& classNames, const in
                 cv::cvtColor(mask_instance, mask_instance_bgr, cv::COLOR_GRAY2BGR);
                 // 将掩码中的物体区域（值为1的区域）设置为当前类别的颜色
                 mask_instance_bgr.setTo(color, mask_instance);
-                // 将彩色掩码与图像画布叠加 掩码权重为 0.45，原图权重为 1.0，创建半透明效果
+                // 将彩色掩码与图像画布叠加 掩码区域权重为 0.45，检测框区域权重为 1.0，创建半透明效果
                 cv::addWeighted(mask_instance_bgr, 0.45, m_img_canvas(roisrc), 1.0, 0., m_img_canvas(roisrc));
 
                 // label's info
@@ -289,4 +296,5 @@ void YOLOv8Seg::showAndSave(const std::vector<std::string>& classNames, const in
             cv::imwrite(m_param.save_path + utils::getTimeStamp() + ".jpg", imgsBatch[bi] + m_img_canvas);
         }
     }
+	std::cout << "YOLOv8Seg::showAndSave Debug Ends! " << std::endl;
 }
